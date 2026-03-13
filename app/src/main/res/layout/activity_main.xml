@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#F5F5F5"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingHorizontal="16dp" android:paddingTop="8dp" android:paddingBottom="6dp"
+        android:background="#5C3D91">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+            android:text="Context-Aware Greeting" android:textColor="#FFF" android:textSize="15sp" android:textStyle="bold"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnSync"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content" android:layout_height="36dp" android:text="☁️  Sync"
+            android:textAllCaps="false" android:textSize="12sp" android:textColor="#FFF"
+            app:strokeColor="#CE93D8" app:cornerRadius="6dp" android:minHeight="36dp" android:layout_marginEnd="8dp"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnReset"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content" android:layout_height="36dp" android:text="🔄  Reset"
+            android:textAllCaps="false" android:textSize="12sp" android:textColor="#FFF"
+            app:strokeColor="#CE93D8" app:cornerRadius="6dp" android:minHeight="36dp"/>
+    </LinearLayout>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:gravity="center_vertical"
+        android:paddingHorizontal="16dp" android:paddingVertical="6dp" android:background="#EDE7F6">
+        <TextView android:id="@+id/tvStepIndicator" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:textSize="13sp" android:textStyle="bold" android:textColor="#5C3D91"/>
+        <TextView android:id="@+id/tvJourneySection" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:textSize="12sp" android:textColor="#7E57C2" android:layout_marginEnd="8dp"/>
+        <TextView android:id="@+id/tvFeedbackCount" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:paddingHorizontal="8dp" android:paddingVertical="2dp"
+            android:background="@drawable/badge_bg" android:textSize="10sp" android:textColor="#FFF"/>
+    </LinearLayout>
+
+    <ScrollView android:id="@+id/scrollView" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true"
+        android:clipToPadding="false" android:paddingHorizontal="12dp" android:paddingTop="8dp" android:paddingBottom="4dp">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+
+            <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content"
+                app:cardCornerRadius="12dp" app:cardElevation="2dp" android:layout_marginBottom="8dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:padding="14dp">
+                    <TextView android:id="@+id/tvConditionTitle" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:textSize="15sp" android:textStyle="bold" android:textColor="#333"/>
+                    <TextView android:id="@+id/tvPredictedContext" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp" android:paddingHorizontal="12dp" android:paddingVertical="4dp"
+                        android:background="@drawable/badge_bg" android:textSize="12sp" android:textColor="#FFF" android:textStyle="bold"/>
+                    <TextView android:id="@+id/tvGreeting" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp" android:textSize="14sp" android:textColor="#1565C0"/>
+                    <TextView android:id="@+id/tvConfidence" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp" android:textSize="11sp" android:textColor="#999"/>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <LinearLayout android:id="@+id/loadingContainer" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center" android:padding="12dp" android:visibility="gone">
+                <ProgressBar android:layout_width="24dp" android:layout_height="24dp" android:indeterminateTint="#5C3D91"/>
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp" android:text="ML model analyzing..." android:textSize="12sp" android:textColor="#888"/>
+            </LinearLayout>
+
+            <androidx.cardview.widget.CardView android:id="@+id/suggestionCard" android:layout_width="match_parent"
+                android:layout_height="wrap_content" app:cardCornerRadius="12dp" app:cardElevation="2dp"
+                app:cardBackgroundColor="#E8F5E9" android:layout_marginBottom="8dp" android:visibility="gone">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:padding="14dp">
+                    <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="🤖  ML App Suggestion" android:textSize="11sp" android:textColor="#2E7D32" android:textStyle="bold"/>
+                    <TextView android:id="@+id/tvSuggestedApp" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp" android:textSize="16sp" android:textStyle="bold" android:textColor="#1B5E20"/>
+                    <TextView android:id="@+id/tvSuggestionMsg" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp" android:textSize="13sp" android:textColor="#555"/>
+                    <TextView android:id="@+id/tvSource" android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp" android:textSize="10sp" android:textColor="#66BB6A"/>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:orientation="horizontal" android:layout_marginTop="10dp" android:gravity="end">
+                        <com.google.android.material.button.MaterialButton android:id="@+id/btnNo"
+                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                            android:layout_width="wrap_content" android:layout_height="40dp" android:text="  No thanks  "
+                            android:textAllCaps="false" android:textSize="13sp" android:textColor="#888"
+                            app:strokeColor="#CCC" app:cornerRadius="8dp" android:minHeight="40dp" android:minWidth="120dp"/>
+                        <com.google.android.material.button.MaterialButton android:id="@+id/btnYes"
+                            android:layout_width="wrap_content" android:layout_height="40dp" android:layout_marginStart="12dp"
+                            android:text="  Yes  ▶  " android:textAllCaps="false" android:textSize="13sp"
+                            app:backgroundTint="#2E7D32" app:cornerRadius="8dp" android:minHeight="40dp" android:minWidth="120dp"/>
+                    </LinearLayout>
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <TextView android:id="@+id/tvNoSuggestion" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:textSize="12sp" android:textColor="#AAA" android:gravity="center" android:padding="12dp" android:visibility="gone"/>
+
+            <com.google.android.material.button.MaterialButton android:id="@+id/btnMoreDetails"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content" android:layout_height="36dp" android:text="▶  More details"
+                android:textAllCaps="false" android:textSize="12sp" android:textColor="#5C3D91" android:minHeight="36dp"/>
+            <androidx.cardview.widget.CardView android:id="@+id/detailsCard" android:layout_width="match_parent"
+                android:layout_height="wrap_content" app:cardCornerRadius="8dp" app:cardElevation="1dp"
+                app:cardBackgroundColor="#FAFAFA" android:layout_marginBottom="8dp" android:visibility="gone">
+                <TextView android:id="@+id/tvDetails" android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:padding="12dp" android:fontFamily="monospace" android:textSize="11sp" android:textColor="#555" android:lineSpacingExtra="2dp"/>
+            </androidx.cardview.widget.CardView>
+        </LinearLayout>
+    </ScrollView>
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:paddingHorizontal="12dp" android:paddingVertical="6dp"
+        android:background="#FFF" android:elevation="8dp">
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnPrev"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1"
+            android:layout_marginEnd="6dp" android:text="◀   Previous" android:textAllCaps="false"
+            android:textSize="13sp" app:strokeColor="#5C3D91" android:textColor="#5C3D91"
+            app:cornerRadius="8dp" android:minHeight="44dp"/>
+        <com.google.android.material.button.MaterialButton android:id="@+id/btnNext"
+            android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1"
+            android:layout_marginStart="6dp" android:text="Next   ▶" android:textAllCaps="false"
+            android:textSize="13sp" app:backgroundTint="#5C3D91" app:cornerRadius="8dp" android:minHeight="44dp"/>
+    </LinearLayout>
+</LinearLayout>
