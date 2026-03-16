@@ -470,7 +470,7 @@ class MainActivity : AppCompatActivity() {
 
             VoiceAssistant.VoiceState.WAITING_TAP -> {
                 voiceContainer.visibility = View.VISIBLE
-                tvVoiceStatus.text = "Tap Yes or No to respond"
+                tvVoiceStatus.text = "\uD83D\uDC46 Tap Yes or No to respond"
                 voiceBar.setBackgroundColor(0xFF1565C0.toInt())
                 startBarAnimation(0.6f, 1.0f, 800)
             }
@@ -654,7 +654,7 @@ class MainActivity : AppCompatActivity() {
         val cr = results[i]
         val r = cr.s.r
         val raw = predApp(cr.l, r[4].toInt(), r[5], r[5] >= 5f, cr.prev, r[7], cr.prev == "NONE")
-        val (adj, wasAdj) = fb.adjustAndValidate(cr.l, raw, meta.app_classes)
+        val (adj, wasAdj) = fb.adjustAndValidate(cr.l, raw, meta.app_classes, r[4].toInt())
         val bi = adj.indices.maxBy { adj[it] }
         val src = when {
             wasAdj -> "On-device learning"
@@ -872,7 +872,7 @@ class MainActivity : AppCompatActivity() {
             val valid = AppFeedbackManager.VALID_APPS[cr.l] ?: emptyList()
             append("Valid apps:$valid\n")
             if (a.l != "none") {
-                val f = fb.getFeedbackSummary(cr.l, a.l)
+                val f = fb.getFeedbackSummary(cr.l, a.l, cr.s.r[4].toInt())
                 if (f.isNotEmpty()) append("Feedback:$f\n")
             }
             append("\nPending:${fb.getLogCount()} Model:v$modelV")
