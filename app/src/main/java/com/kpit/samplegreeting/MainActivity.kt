@@ -412,7 +412,7 @@ class MainActivity : AppCompatActivity() {
 
             VoiceAssistant.VoiceState.WAITING_TAP -> {
                 voiceContainer.visibility = View.VISIBLE
-                tvVoiceStatus.text = "\uD83D\uDC46 Tap Yes or No to respond"
+                tvVoiceStatus.text = "Tap Yes or No to respond"
                 voiceBar.setBackgroundColor(0xFF1565C0.toInt())
                 startBarAnimation(0.6f, 1.0f, 800)
             }
