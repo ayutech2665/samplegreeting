@@ -96,6 +96,7 @@ class MainActivity : AppCompatActivity() {
     private var cur = 0
     private var animating = false
     private var modelV = 1
+    private var firstResume = true
     private val usedGreetings = mutableSetOf<String>()
 
     data class CR(
@@ -382,6 +383,42 @@ class MainActivity : AppCompatActivity() {
             cancelVoice()
             Toast.makeText(this, "Preferences saved locally", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Stop voice when app goes to background
+        // This prevents TTS from playing while app is not visible
+        cancelVoice()
+        Log.i(TAG, "onPause: voice cancelled")
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        // Skip the first onResume (fires right after onCreate, voice already triggered there)
+        if (firstResume) {
+            firstResume = false
+            return
+        }
+
+        Log.i(TAG, "onResume: checking TTS health")
+
+        // Reinit TTS if it died while backgrounded
+        voice?.reinitIfNeeded()
+
+        // Re-trigger voice for current step after TTS is ready
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (!animating) {
+                val a = live(cur)
+                if (a.l != "none" && a.c > 0.01f &&
+                    btnYes.isEnabled && suggCard.visibility == View.VISIBLE
+                ) {
+                    Log.i(TAG, "onResume: re-triggering voice for step ${cur + 1}")
+                    startVoiceForSuggestion(a.l)
+                }
+            }
+        }, 1500)
     }
 
     override fun onDestroy() {

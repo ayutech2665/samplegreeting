@@ -173,6 +173,34 @@ class VoiceAssistant(
         tts = null
     }
 
+    /**
+     * Call from Activity.onResume() to recover from TTS disconnect.
+     * Tests if TTS is still alive by checking speak() return value.
+     * If dead, reinitializes the entire TTS engine.
+     */
+    fun reinitIfNeeded() {
+        if (tts == null) {
+            Log.i(TAG, "TTS is null, reinitializing...")
+            ttsReady = false
+            initTTS()
+            return
+        }
+
+        // Test if TTS is still functional by speaking empty silence
+        // speak() returns ERROR (-1) if the engine is disconnected
+        val result = tts?.speak("", TextToSpeech.QUEUE_ADD, null, "health_check")
+        if (result == TextToSpeech.ERROR) {
+            Log.i(TAG, "TTS health check FAILED, reinitializing...")
+            ttsReady = false
+            tts?.shutdown()
+            tts = null
+            initTTS()
+        } else {
+            tts?.stop() // cancel the health check utterance
+            Log.i(TAG, "TTS health check OK (ttsReady=$ttsReady)")
+        }
+    }
+
     // ══════════════════════════════════════
     // TTS WAIT
     // ══════════════════════════════════════
