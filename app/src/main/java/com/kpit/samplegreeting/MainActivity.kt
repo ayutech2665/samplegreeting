@@ -82,6 +82,12 @@ class MainActivity : AppCompatActivity() {
     private var voiceBarAnimator: ObjectAnimator? = null
     private var voice: VoiceAssistant? = null
 
+    // ── Sync prompt (Step 29) ──
+    private lateinit var syncPromptCard: CardView
+    private lateinit var tvSyncPromptMsg: TextView
+    private lateinit var btnSyncYes: Button
+    private lateinit var btnSyncNo: Button
+
     // ── Models + State ──
     private var ctxModel: Interpreter? = null
     private var appModel: Interpreter? = null
@@ -361,6 +367,21 @@ class MainActivity : AppCompatActivity() {
             }
             false
         }
+
+        // ── Sync prompt buttons (Step 29 speak-only) ──
+        btnSyncYes.setOnClickListener {
+            Log.i(TAG, "Sync Yes tapped")
+            syncPromptCard.visibility = View.GONE
+            cancelVoice()
+            Toast.makeText(this, "Syncing preferences...", Toast.LENGTH_SHORT).show()
+            syncWithVoiceConfirmation()
+        }
+        btnSyncNo.setOnClickListener {
+            Log.i(TAG, "Sync No tapped")
+            syncPromptCard.visibility = View.GONE
+            cancelVoice()
+            Toast.makeText(this, "Preferences saved locally", Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun onDestroy() {
@@ -639,6 +660,7 @@ class MainActivity : AppCompatActivity() {
         tvNone.visibility = View.GONE
         loading.visibility = View.GONE
         voiceContainer.visibility = View.GONE
+        syncPromptCard.visibility = View.GONE
         btnYes.isEnabled = true
         btnNo.isEnabled = true
         btnYes.text = "  Yes  \u25B6  "
@@ -717,22 +739,40 @@ class MainActivity : AppCompatActivity() {
         val pending = fb.getLogCount()
         if (pending == 0) return
 
-        voice?.askCustomQuestion(
-            voiceText = "You've shared $pending preferences during this journey. " +
-                    "Would you like me to sync them to the cloud so the system remembers next time?",
-            confirmLine = "Great, syncing your preferences now.",
-            declineLine = "No problem, your preferences are saved locally for now.",
-            retryLine = "Sorry, I didn't catch that. Would you like to sync? Just say yes or no.",
-            onCustomYes = {
-                runOnUiThread {
-                    Toast.makeText(this, "Syncing...", Toast.LENGTH_SHORT).show()
-                    syncWithVoiceConfirmation()
+        val syncMessage = "You've shared $pending preferences during this journey. " +
+                "Would you like me to sync them to the cloud so the system remembers next time?"
+
+        if (voice?.isSpeakOnly() == true) {
+            // SPEAK-ONLY: Voice speaks, then show buttons for tapping
+            Log.i(TAG, "Step 29 sync prompt (speak-only mode)")
+            tvSyncPromptMsg.text = syncMessage
+            voice?.speakMessage(syncMessage)
+
+            // Show sync buttons after TTS finishes speaking
+            Handler(Looper.getMainLooper()).postDelayed({
+                syncPromptCard.visibility = View.VISIBLE
+                syncPromptCard.alpha = 0f
+                syncPromptCard.animate().alpha(1f).setDuration(300).start()
+            }, 8000)
+        } else {
+            // FULL MODE: Voice speaks + listens, no buttons needed
+            Log.i(TAG, "Step 29 sync prompt (full voice mode)")
+            voice?.askCustomQuestion(
+                voiceText = syncMessage,
+                confirmLine = "Great, syncing your preferences now.",
+                declineLine = "No problem, your preferences are saved locally for now.",
+                retryLine = "Sorry, I didn't catch that. Would you like to sync? Just say yes or no.",
+                onCustomYes = {
+                    runOnUiThread {
+                        Toast.makeText(this, "Syncing...", Toast.LENGTH_SHORT).show()
+                        syncWithVoiceConfirmation()
+                    }
+                },
+                onCustomNo = {
+                    runOnUiThread { hideVoiceUI() }
                 }
-            },
-            onCustomNo = {
-                runOnUiThread { hideVoiceUI() }
-            }
-        )
+            )
+        }
     }
 
     private fun syncWithVoiceConfirmation() {
@@ -1054,6 +1094,10 @@ class MainActivity : AppCompatActivity() {
         voiceContainer = findViewById(R.id.voiceContainer)
         voiceBar = findViewById(R.id.voiceBar)
         tvVoiceStatus = findViewById(R.id.tvVoiceStatus)
+        syncPromptCard = findViewById(R.id.syncPromptCard)
+        tvSyncPromptMsg = findViewById(R.id.tvSyncPromptMsg)
+        btnSyncYes = findViewById(R.id.btnSyncYes)
+        btnSyncNo = findViewById(R.id.btnSyncNo)
     }
 
     private fun loadAsset(f: String): ByteBuffer {
