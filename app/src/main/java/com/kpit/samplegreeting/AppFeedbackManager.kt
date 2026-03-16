@@ -6,11 +6,6 @@ import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * STRICT context-to-app mapping enforced here.
- * Even if the model outputs commute_to_work for STOPPED_EN_ROUTE,
- * this manager will reject it and return "none" instead.
- */
 class AppFeedbackManager(context: Context) {
     companion object {
         private const val TAG = "AppFeedback"
@@ -18,7 +13,6 @@ class AppFeedbackManager(context: Context) {
         private const val LOG_P = "feedback_log_prefs"
         const val SUPPRESS_THRESHOLD = 3
 
-        // STRICT: Only these apps are EVER valid per context
         val VALID_APPS = mapOf(
             "IDLE_HOME"         to listOf("mespace"),
             "COMMUTING_TO_WORK" to listOf("commute_to_work", "music"),
@@ -61,52 +55,21 @@ class AppFeedbackManager(context: Context) {
         return no >= SUPPRESS_THRESHOLD && yes == 0
     }
 
-    /**
-     * Adjust model probabilities WITH STRICT VALIDATION.
-     *
-     * Step 1: Zero out any app that's NOT in VALID_APPS for this context
-     * Step 2: Apply suppression multipliers from feedback
-     * Step 3: If nothing left → return "none"
-     *
-     * This guarantees: STOPPED_EN_ROUTE will NEVER suggest commute_to_work
-     */
-    fun adjustAndValidate(
-        ctx: String, rawProbs: FloatArray, appClasses: List<String>
-    ): Pair<FloatArray, Boolean> {
+    fun adjustAndValidate(ctx: String, rawProbs: FloatArray, appClasses: List<String>): Pair<FloatArray, Boolean> {
         val valid = VALID_APPS[ctx] ?: emptyList()
         val adjusted = FloatArray(rawProbs.size)
         var anyAdj = false
-
         for (i in rawProbs.indices) {
             val app = appClasses[i]
             when {
-                app == "none" -> {
-                    // "none" is always allowed
-                    adjusted[i] = rawProbs[i]
-                }
-                app !in valid -> {
-                    // STRICT: this app is NOT valid for this context → zero
-                    adjusted[i] = 0f
-                }
-                else -> {
-                    // Valid app → apply feedback multiplier
-                    val m = getMultiplier(ctx, app)
-                    adjusted[i] = rawProbs[i] * m
-                    if (m != 0.5f) anyAdj = true
-                }
+                app == "none" -> adjusted[i] = rawProbs[i]
+                app !in valid -> adjusted[i] = 0f
+                else -> { val m = getMultiplier(ctx, app); adjusted[i] = rawProbs[i] * m; if (m != 0.5f) anyAdj = true }
             }
         }
-
-        // If all valid apps are zeroed (suppressed) → boost "none"
         val noneIdx = appClasses.indexOf("none")
-        val anyValidLeft = valid.any { app ->
-            val idx = appClasses.indexOf(app)
-            idx >= 0 && adjusted[idx] > 0.001f
-        }
-        if (!anyValidLeft && noneIdx >= 0) {
-            adjusted[noneIdx] = 1.0f
-        }
-
+        val anyLeft = valid.any { a -> val idx = appClasses.indexOf(a); idx >= 0 && adjusted[idx] > 0.001f }
+        if (!anyLeft && noneIdx >= 0) adjusted[noneIdx] = 1.0f
         return Pair(adjusted, anyAdj)
     }
 
@@ -119,7 +82,6 @@ class AppFeedbackManager(context: Context) {
         return "yes=$y no=$n" + if (isSuppressed(ctx, appId)) " SUPPRESSED" else ""
     }
 
-    // ── Log for export ──
     private fun addLog(ctx: String, app: String, action: String, hr: Int, wd: Int, prev: String, dw: Int) {
         val e = JSONObject().apply {
             put("context", ctx); put("app", app); put("action", action)
@@ -137,10 +99,7 @@ class AppFeedbackManager(context: Context) {
     fun getLogCount(): Int = logArray().length()
 
     fun buildExportJson(deviceId: String): String {
-        return JSONObject().apply {
-            put("device_id", deviceId)
-            put("feedback", logArray())
-        }.toString(2)
+        return JSONObject().apply { put("device_id", deviceId); put("feedback", logArray()) }.toString(2)
     }
 
     fun clearAfterSync() { prefs.edit().clear().apply(); logPrefs.edit().clear().apply() }

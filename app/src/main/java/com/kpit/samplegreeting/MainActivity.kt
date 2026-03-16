@@ -1,9 +1,14 @@
 package com.kpit.samplegreeting
 
-import android.animation.Animator
+import android.Manifest
+import android.animation.ObjectAnimator
 import android.animation.AnimatorListenerAdapter
+import android.animation.Animator
+import android.animation.ValueAnimator
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
+import android.view.MotionEvent
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.Button
@@ -13,6 +18,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.cardview.widget.CardView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -34,10 +41,12 @@ import kotlin.math.min
 class MainActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "Main"
-        private const val SERVER_URL = "https://ayush2665.pythonanywhere.com/"
+        private const val SERVER_URL = "https://ayush2665.pythonanywhere.com/"   // CHANGE THIS
         private const val DEVICE_ID = "infotainment_001"
+        private const val PERMISSION_AUDIO = 100
     }
 
+    // ── Views ──
     private lateinit var tvStep: TextView; private lateinit var tvSection: TextView
     private lateinit var tvBadge: TextView; private lateinit var tvTitle: TextView
     private lateinit var tvContext: TextView; private lateinit var tvGreet: TextView
@@ -51,45 +60,199 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnSync: Button; private lateinit var btnReset: Button
     private lateinit var scroll: ScrollView
 
+    // Voice UI
+    private lateinit var voiceContainer: View
+    private lateinit var voiceBar: View
+    private lateinit var tvVoiceStatus: TextView
+    private var voiceBarAnimator: ObjectAnimator? = null
+
+    // ── Models + State ──
     private var ctxModel: Interpreter? = null; private var appModel: Interpreter? = null
     private lateinit var meta: Meta; private lateinit var fb: AppFeedbackManager
+    private var voice: VoiceAssistant? = null
     private var cur = 0; private var animating = false; private var modelV = 1
     private val usedGreetings = mutableSetOf<String>()
+
     data class CR(val s: Step, val l: String, val c: Float, val p: FloatArray, val prev: String, val g: String)
     private val results = mutableListOf<CR>()
+
+    // ── Personalized suggestion messages ──
+    // Triple = (title, screenQuestion, voiceQuestion)
     private val appDisp = mapOf(
-        "commute_to_work" to Pair("🏢 Commute to Work","Open commute assistant for office?"),
-        "commute_to_home" to Pair("🏡 Commute to Home","Open commute assistant for home?"),
-        "navigation" to Pair("🗺️ Navigation","Open navigation for this trip?"),
-        "music" to Pair("🎵 Music","Play some music?"),
-        "anti_stress" to Pair("🧘 Anti-Stress","Long wait — open anti-stress?"),
-        "mespace" to Pair("⭐ MeSpace","Set preferences with MeSpace?"),
-        "none" to Pair("",""))
+        "commute_to_work" to Triple(
+            "🏢  Commute to Work",
+            "You usually switch to Commute to Work mode around this time. Want me to open it?",
+            "You usually use Commute to Work mode around this time. Would you like me to open it for you?"
+        ),
+        "commute_to_home" to Triple(
+            "🏡  Commute to Home",
+            "You often use Commute to Home mode from here. Shall I start it?",
+            "You often switch to Commute to Home mode from here. Shall I start it for you?"
+        ),
+        "navigation" to Triple(
+            "🗺️  Navigation",
+            "You usually open Navigation for trips like this. Want me to start it?",
+            "You usually open Navigation for trips like this. Would you like me to start it?"
+        ),
+        "music" to Triple(
+            "🎵  Music",
+            "You usually play music during this drive. Should I open it?",
+            "You usually play music during this kind of drive. Should I open it for you?"
+        ),
+        "anti_stress" to Triple(
+            "🧘  Anti-Stress",
+            "Looks like a long wait. You usually open Anti-Stress here. Want me to open it?",
+            "Looks like a bit of a wait. You usually open Anti-Stress in situations like this. Want me to open it?"
+        ),
+        "mespace" to Triple(
+            "⭐  MeSpace",
+            "You usually set up MeSpace when you start. Shall I open it?",
+            "You usually like to set up MeSpace when you get in. Shall I open it for you?"
+        ),
+        "none" to Triple("", "", "")
+    )
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b); setContentView(R.layout.activity_main); bind()
         meta = Gson().fromJson(assets.open("context_model_metadata_v2.json").bufferedReader().use(BufferedReader::readText), Meta::class.java)
-        fb = AppFeedbackManager(this); loadModels(); compute(); show(0, true)
+        fb = AppFeedbackManager(this); loadModels(); compute()
 
-        btnNext.setOnClickListener { if (!animating && cur < results.size-1) { cur++; show(cur, true) } }
-        btnPrev.setOnClickListener { if (!animating && cur > 0) { cur--; show(cur, true) } }
-        btnDetail.setOnClickListener {
-            if (detailCard.visibility == View.GONE) { detailCard.visibility = View.VISIBLE; detailCard.alpha = 0f
-                detailCard.animate().alpha(1f).setDuration(200).start(); btnDetail.text = "▼ Hide details"
-            } else { detailCard.visibility = View.GONE; btnDetail.text = "▶ More details" }
-        }
-        btnYes.setOnClickListener { val cr=results[cur]; val a=live(cur)
+        requestAudioPermission()
+        initVoice()
+
+        showStep(0, true)
+
+        btnNext.setOnClickListener { if (!animating && cur < results.size-1) { cancelVoice(); cur++; showStep(cur, true) } }
+        btnPrev.setOnClickListener { if (!animating && cur > 0) { cancelVoice(); cur--; showStep(cur, true) } }
+        btnDetail.setOnClickListener { toggleDetails() }
+
+        // ── YES button ──
+        btnYes.setOnClickListener {
+            cancelVoice()
+            val cr=results[cur]; val a=live(cur)
             if (a.l!="none") { val r=cr.s.r; fb.recordYes(cr.l,a.l,r[4].toInt(),r[5].toInt(),cr.prev,r[7].toInt()) }
-            btnYes.isEnabled=false; btnNo.isEnabled=false; btnYes.text="✓ Opened"; badge(); detail() }
-        btnNo.setOnClickListener { val cr=results[cur]; val a=live(cur)
+            btnYes.isEnabled=false; btnNo.isEnabled=false; btnYes.text="✓ Opened"; badge(); detail()
+        }
+
+        // ── NO button ──
+        btnNo.setOnClickListener {
+            cancelVoice()
+            val cr=results[cur]; val a=live(cur)
             if (a.l!="none") { val r=cr.s.r; fb.recordNo(cr.l,a.l,r[4].toInt(),r[5].toInt(),cr.prev,r[7].toInt()) }
-            btnYes.isEnabled=false; btnNo.isEnabled=false; btnNo.text="✓ Dismissed"; badge(); detail() }
-        btnSync.setOnClickListener { sync() }
-        btnReset.setOnClickListener { reset() }
+            btnYes.isEnabled=false; btnNo.isEnabled=false; btnNo.text="✓ Dismissed"; badge(); detail()
+        }
+
+        btnSync.setOnClickListener { cancelVoice(); sync() }
+        btnReset.setOnClickListener { cancelVoice(); reset() }
+
+        // Dismiss voice on scroll/tap outside suggestion
+        scroll.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_DOWN && voice?.isRunning() == true) {
+                cancelVoice()
+            }
+            false
+        }
+
         badge()
     }
 
-    override fun onDestroy() { super.onDestroy(); ctxModel?.close(); appModel?.close() }
+    override fun onDestroy() { super.onDestroy(); ctxModel?.close(); appModel?.close(); voice?.destroy() }
+
+    // ═══════════════════════════════════════
+    // VOICE ASSISTANT
+    // ═══════════════════════════════════════
+
+    private fun requestAudioPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), PERMISSION_AUDIO)
+        }
+    }
+
+    private fun initVoice() {
+        voice = VoiceAssistant(
+            activity = this,
+            onYes = {
+                // Trigger the same action as manual Yes tap
+                runOnUiThread { btnYes.performClick() }
+            },
+            onNo = {
+                // Trigger the same action as manual No tap
+                runOnUiThread { btnNo.performClick() }
+            },
+            onTimeout = {
+                // Voice closed without response — buttons stay active
+                runOnUiThread { hideVoiceUI() }
+            },
+            onStateChange = { state ->
+                runOnUiThread { updateVoiceUI(state) }
+            }
+        )
+    }
+
+    private fun startVoiceForSuggestion(appLabel: String) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            return  // No permission, skip voice — manual buttons still work
+        }
+        val info = appDisp[appLabel] ?: return
+        val voiceQ = info.third
+        if (voiceQ.isNotEmpty()) {
+            voice?.askQuestion(voiceQ)
+        }
+    }
+
+    private fun cancelVoice() {
+        voice?.cancel()
+        hideVoiceUI()
+    }
+
+    private fun updateVoiceUI(state: VoiceAssistant.VoiceState) {
+        when (state) {
+            VoiceAssistant.VoiceState.SPEAKING -> {
+                voiceContainer.visibility = View.VISIBLE
+                tvVoiceStatus.text = "🔊 Speaking..."
+                voiceBar.setBackgroundColor(0xFF5C3D91.toInt())  // purple
+                startBarAnimation(0.3f, 1.0f, 500)
+            }
+            VoiceAssistant.VoiceState.LISTENING -> {
+                voiceContainer.visibility = View.VISIBLE
+                tvVoiceStatus.text = "🎙️ Listening..."
+                voiceBar.setBackgroundColor(0xFF2E7D32.toInt())  // green
+                startBarAnimation(0.5f, 1.0f, 400)
+            }
+            VoiceAssistant.VoiceState.RETRYING -> {
+                voiceContainer.visibility = View.VISIBLE
+                tvVoiceStatus.text = "🔁 Didn't catch that..."
+                voiceBar.setBackgroundColor(0xFFF57F17.toInt())  // amber
+                startBarAnimation(0.3f, 1.0f, 600)
+            }
+            VoiceAssistant.VoiceState.IDLE -> {
+                hideVoiceUI()
+            }
+        }
+    }
+
+    private fun startBarAnimation(from: Float, to: Float, duration: Long) {
+        voiceBarAnimator?.cancel()
+        voiceBarAnimator = ObjectAnimator.ofFloat(voiceBar, "scaleX", from, to).apply {
+            this.duration = duration
+            repeatMode = ValueAnimator.REVERSE
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = AccelerateDecelerateInterpolator()
+            start()
+        }
+    }
+
+    private fun hideVoiceUI() {
+        voiceBarAnimator?.cancel()
+        voiceContainer.animate().alpha(0f).setDuration(200).withEndAction {
+            voiceContainer.visibility = View.GONE
+            voiceContainer.alpha = 1f
+        }.start()
+    }
+
+    // ═══════════════════════════════════════
+    // MODEL LOADING
+    // ═══════════════════════════════════════
 
     private fun loadModels() {
         ctxModel?.close(); appModel?.close()
@@ -101,86 +264,96 @@ class MainActivity : AppCompatActivity() {
                 FileInputStream(local).channel.use { it.read(buf); buf.rewind() }
                 appModel = Interpreter(buf)
                 modelV = getSharedPreferences("mp", MODE_PRIVATE).getInt("v", 1)
-                Log.d(TAG, "Loaded retrained v$modelV")
             } catch (e: Exception) { local.delete(); appModel = Interpreter(loadAsset("app_suggestion_v1.tflite")); modelV = 1 }
         } else { appModel = Interpreter(loadAsset("app_suggestion_v1.tflite")); modelV = 1 }
     }
 
+    // ═══════════════════════════════════════
+    // SYNC + RESET (same as before)
+    // ═══════════════════════════════════════
+
     private fun sync() {
-        val n = fb.getLogCount(); if (n==0) { Toast.makeText(this,"No feedback",Toast.LENGTH_SHORT).show(); return }
+        val n=fb.getLogCount(); if(n==0){Toast.makeText(this,"No feedback",Toast.LENGTH_SHORT).show();return}
         btnSync.isEnabled=false; btnSync.text="⏳"
         lifecycleScope.launch {
             try {
-                val json = fb.buildExportJson(DEVICE_ID)
-                val resp = withContext(Dispatchers.IO) { post("$SERVER_URL/api/feedback", json) } ?: throw Exception("Server unreachable")
-                val j = org.json.JSONObject(resp)
-                if (j.getString("status")!="ok") throw Exception(j.optString("message","Error"))
-                val nv = j.getInt("model_version")
-                val bytes = withContext(Dispatchers.IO) { get("$SERVER_URL/api/model") } ?: throw Exception("Download failed")
+                val json=fb.buildExportJson(DEVICE_ID)
+                val resp=withContext(Dispatchers.IO){post("$SERVER_URL/api/feedback",json)} ?: throw Exception("Server unreachable")
+                val j=org.json.JSONObject(resp)
+                if(j.getString("status")!="ok") throw Exception(j.optString("message","Error"))
+                val nv=j.getInt("model_version")
+                val bytes=withContext(Dispatchers.IO){get("$SERVER_URL/api/model")} ?: throw Exception("Download failed")
                 File(filesDir,"app_suggestion_v1.tflite").writeBytes(bytes)
                 getSharedPreferences("mp",MODE_PRIVATE).edit().putInt("v",nv).apply()
                 fb.clearAfterSync(); loadModels()
-                withContext(Dispatchers.Main) { Toast.makeText(this@MainActivity,"✅ v$nv",Toast.LENGTH_LONG).show(); show(cur,false); badge() }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) { AlertDialog.Builder(this@MainActivity).setTitle("Sync Failed").setMessage(e.message).setPositiveButton("OK",null).show() }
-            } finally { withContext(Dispatchers.Main) { btnSync.isEnabled=true; btnSync.text="☁️ Sync" } }
+                withContext(Dispatchers.Main){Toast.makeText(this@MainActivity,"✅ v$nv",Toast.LENGTH_LONG).show(); showStep(cur,false); badge()}
+            } catch(e:Exception){
+                withContext(Dispatchers.Main){AlertDialog.Builder(this@MainActivity).setTitle("Sync Failed").setMessage(e.message).setPositiveButton("OK",null).show()}
+            } finally { withContext(Dispatchers.Main){btnSync.isEnabled=true;btnSync.text="☁️  Sync"} }
         }
     }
 
     private fun reset() {
         AlertDialog.Builder(this).setTitle("Reset").setMessage("Restore original model v1?\nAll feedback will be cleared.")
-            .setPositiveButton("Reset") { _,_ ->
+            .setPositiveButton("Reset"){ _,_ ->
                 btnReset.isEnabled=false
                 lifecycleScope.launch {
-                    try { withContext(Dispatchers.IO) { post("$SERVER_URL/api/reset","{}") }
-                        val bytes = withContext(Dispatchers.IO) { get("$SERVER_URL/api/model") }
-                        if (bytes!=null) File(filesDir,"app_suggestion_v1.tflite").writeBytes(bytes)
+                    try{withContext(Dispatchers.IO){post("$SERVER_URL/api/reset","{}")}
+                        val bytes=withContext(Dispatchers.IO){get("$SERVER_URL/api/model")}
+                        if(bytes!=null) File(filesDir,"app_suggestion_v1.tflite").writeBytes(bytes)
                         else File(filesDir,"app_suggestion_v1.tflite").delete()
-                    } catch (_: Exception) { File(filesDir,"app_suggestion_v1.tflite").delete() }
+                    }catch(_:Exception){File(filesDir,"app_suggestion_v1.tflite").delete()}
                     getSharedPreferences("mp",MODE_PRIVATE).edit().putInt("v",1).apply()
-                    fb.resetAll(); loadModels()
-                    withContext(Dispatchers.Main) { show(cur,false); badge(); btnReset.isEnabled=true
-                        Toast.makeText(this@MainActivity,"Reset to v1 ✓",Toast.LENGTH_LONG).show() }
+                    fb.resetAll();loadModels()
+                    withContext(Dispatchers.Main){showStep(cur,false);badge();btnReset.isEnabled=true
+                        Toast.makeText(this@MainActivity,"Reset to v1 ✓",Toast.LENGTH_LONG).show()}
                 }
             }.setNegativeButton("Cancel",null).show()
     }
 
-    private fun post(url: String, json: String): String? = try {
-        val c=URL(url).openConnection() as HttpURLConnection; c.requestMethod="POST"
-        c.setRequestProperty("Content-Type","application/json"); c.doOutput=true; c.connectTimeout=30000; c.readTimeout=120000
-        c.outputStream.use{it.write(json.toByteArray())}; if(c.responseCode==200) c.inputStream.bufferedReader().readText() else null
-    } catch(e:Exception){null}
+    private fun post(url:String,json:String):String?=try{
+        val c=URL(url).openConnection() as HttpURLConnection;c.requestMethod="POST"
+        c.setRequestProperty("Content-Type","application/json");c.doOutput=true;c.connectTimeout=30000;c.readTimeout=120000
+        c.outputStream.use{it.write(json.toByteArray())};if(c.responseCode==200)c.inputStream.bufferedReader().readText() else null
+    }catch(e:Exception){null}
 
-    private fun get(url: String): ByteArray? = try {
-        val c=URL(url).openConnection() as HttpURLConnection; c.connectTimeout=15000; c.readTimeout=30000
-        if(c.responseCode==200) c.inputStream.readBytes() else null
-    } catch(e:Exception){null}
+    private fun get(url:String):ByteArray?=try{
+        val c=URL(url).openConnection() as HttpURLConnection;c.connectTimeout=15000;c.readTimeout=30000
+        if(c.responseCode==200)c.inputStream.readBytes() else null
+    }catch(e:Exception){null}
 
-    // ══ LIVE APP SUGGESTION with STRICT VALIDATION ══
-    data class AR(val l: String, val c: Float, val src: String)
-    private fun live(i: Int): AR {
-        val cr=results[i]; val r=cr.s.r
-        val raw = predApp(cr.l,r[4].toInt(),r[5],r[5]>=5f,cr.prev,r[7],cr.prev=="NONE")
-        // STRICT: adjustAndValidate enforces context-valid apps only
-        val (adj, wasAdj) = fb.adjustAndValidate(cr.l, raw, meta.app_classes)
+    // ═══════════════════════════════════════
+    // LIVE APP SUGGESTION (with STRICT validation)
+    // ═══════════════════════════════════════
+
+    data class AR(val l:String, val c:Float, val src:String)
+    private fun live(i:Int):AR{
+        val cr=results[i];val r=cr.s.r
+        val raw=predApp(cr.l,r[4].toInt(),r[5],r[5]>=5f,cr.prev,r[7],cr.prev=="NONE")
+        val(adj,wasAdj)=fb.adjustAndValidate(cr.l,raw,meta.app_classes)
         val bi=adj.indices.maxBy{adj[it]}
         val src=when{wasAdj->"On-device learning";modelV>1->"Retrained model (v$modelV)";else->"Original model (v1)"}
-        return AR(meta.app_classes[bi], adj[bi], src)
+        return AR(meta.app_classes[bi],adj[bi],src)
     }
 
-    private fun compute() { results.clear(); usedGreetings.clear(); var p="NONE"
-        for(s in steps()){if(s.po!=null)p=s.po; val pr=predCtx(s.r,p); val i=pr.indices.maxBy{pr[it]}
-            val l=meta.class_names[i]; results.add(CR(s,l,pr[i],pr,p,greet(l,pr[i],s.r[4].toInt(),p))); p=l} }
+    // ═══════════════════════════════════════
+    // SHOW STEP
+    // ═══════════════════════════════════════
 
-    private fun show(i: Int, anim: Boolean) {
-        animating=anim; val cr=results[i]
-        btnPrev.isEnabled=i>0; btnNext.isEnabled=i<results.size-1
-        tvStep.text="Step ${i+1} / ${results.size}"; tvSection.text=cr.s.j
-        detailCard.visibility=View.GONE; btnDetail.text="▶ More details"
-        suggCard.visibility=View.GONE; tvNone.visibility=View.GONE; loading.visibility=View.GONE
+    private fun compute(){results.clear();usedGreetings.clear();var p="NONE"
+        for(s in steps()){if(s.po!=null)p=s.po;val pr=predCtx(s.r,p);val i=pr.indices.maxBy{pr[it]}
+            val l=meta.class_names[i];results.add(CR(s,l,pr[i],pr,p,greet(l,pr[i],s.r[4].toInt(),p)));p=l}}
+
+    private fun showStep(i:Int,anim:Boolean){
+        animating=anim; cancelVoice(); val cr=results[i]
+        btnPrev.isEnabled=i>0;btnNext.isEnabled=i<results.size-1
+        tvStep.text="Step ${i+1} / ${results.size}";tvSection.text=cr.s.j
+        detailCard.visibility=View.GONE;btnDetail.text="▶  More details"
+        suggCard.visibility=View.GONE;tvNone.visibility=View.GONE;loading.visibility=View.GONE
+        voiceContainer.visibility=View.GONE
         btnYes.isEnabled=true;btnNo.isEnabled=true;btnYes.text="  Yes  ▶  ";btnNo.text="  No thanks  "
-        tvTitle.text=cr.s.t; tvContext.text="${emoji(cr.l)}  ${cr.l}"; tvGreet.text=cr.g
-        tvConf.text="Confidence: ${"%.3f".format(cr.c)}"; scroll.scrollTo(0,0); detail()
+        tvTitle.text=cr.s.t;tvContext.text="${emoji(cr.l)}  ${cr.l}";tvGreet.text=cr.g
+        tvConf.text="Confidence: ${"%.3f".format(cr.c)}";scroll.scrollTo(0,0);detail()
         if(anim){lifecycleScope.launch{delay(300);loading.visibility=View.VISIBLE;loading.alpha=0f
             loading.animate().alpha(1f).setDuration(200).setInterpolator(AccelerateDecelerateInterpolator()).start()
             delay(1000);loading.animate().alpha(0f).setDuration(150).setListener(object:AnimatorListenerAdapter(){
@@ -189,31 +362,106 @@ class MainActivity : AppCompatActivity() {
         }else{showSugg(i);animating=false}
     }
 
-    private fun showSugg(i: Int) {
-        val a = live(i)
-        tvSource.text = "Source: ${a.src}"
-
-        if (a.l != "none" && a.c > 0.01f) {
-            val d = appDisp[a.l] ?: Pair(a.l, "Open?")
-            tvApp.text = d.first
-            tvMsg.text = d.second
-            suggCard.visibility = View.VISIBLE
-            suggCard.alpha = 0f
-            suggCard.translationY = 20f
-            suggCard.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(250)
+    private fun showSugg(i:Int){
+        val a=live(i);tvSource.text="Source: ${a.src}"
+        if(a.l!="none"&&a.c>0.01f){
+            val d=appDisp[a.l]?:Triple(a.l,"Open?","Would you like to open it?")
+            tvApp.text=d.first
+            tvMsg.text=d.second
+            suggCard.visibility=View.VISIBLE;suggCard.alpha=0f;suggCard.translationY=20f
+            suggCard.animate().alpha(1f).translationY(0f).setDuration(250)
                 .setInterpolator(AccelerateDecelerateInterpolator())
-                .start()
-        } else {
-            tvNone.text =
-                if (fb.hasAnyFeedback())
-                    "Suppressed by feedback.\nSync to make permanent."
-                else
-                    "No suggestion for this context."
+                .withEndAction {
+                    startVoiceForSuggestion(a.l)
+                }.start()
+        }else{
+            tvNone.text=if(fb.hasAnyFeedback())"Suppressed by feedback.\nSync to make permanent." else "No suggestion for this context."
+            tvNone.visibility=View.VISIBLE
 
-            tvNone.visibility = View.VISIBLE
+            // ── STEP 29: Ask to sync via voice if there's pending feedback ──
+            if (i == results.size - 1 && fb.getLogCount() > 0) {
+                // Wait a moment for the user to read the screen, then ask
+                lifecycleScope.launch {
+                    delay(2000)
+                    askSyncViaVoice()
+                }
+            }
+        }
+    }
+
+    /**
+     * Voice-triggered sync at Step 29:
+     * "You've given some feedback during this journey.
+     *  Would you like me to sync your preferences to the cloud
+     *  to make them permanent?"
+     */
+    private fun askSyncViaVoice() {
+        val pending = fb.getLogCount()
+        if (pending == 0) return
+
+        voice?.askCustomQuestion(
+            voiceText = "You've shared $pending preferences during this journey. " +
+                "Would you like me to sync them to the cloud so the system remembers next time?",
+            confirmLine = "Great, syncing your preferences now.",
+            declineLine = "No problem, your preferences are saved locally for now.",
+            retryLine = "Sorry, I didn't catch that. Would you like to sync your preferences? Just say yes or no.",
+            onCustomYes = {
+                runOnUiThread {
+                    Toast.makeText(this, "Syncing preferences...", Toast.LENGTH_SHORT).show()
+                    syncWithVoiceConfirmation()
+                }
+            },
+            onCustomNo = {
+                runOnUiThread {
+                    hideVoiceUI()
+                    Toast.makeText(this, "Preferences saved locally", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
+
+    /**
+     * Sync triggered by voice — same as regular sync but speaks confirmation after.
+     */
+    private fun syncWithVoiceConfirmation() {
+        val n = fb.getLogCount()
+        if (n == 0) return
+        btnSync.isEnabled = false; btnSync.text = "⏳"
+
+        lifecycleScope.launch {
+            try {
+                val json = fb.buildExportJson(DEVICE_ID)
+                val resp = withContext(Dispatchers.IO) { post("$SERVER_URL/api/feedback", json) }
+                    ?: throw Exception("Server unreachable")
+                val j = org.json.JSONObject(resp)
+                if (j.getString("status") != "ok") throw Exception(j.optString("message", "Error"))
+                val nv = j.getInt("model_version")
+                val bytes = withContext(Dispatchers.IO) { get("$SERVER_URL/api/model") }
+                    ?: throw Exception("Download failed")
+                File(filesDir, "app_suggestion_v1.tflite").writeBytes(bytes)
+                getSharedPreferences("mp", MODE_PRIVATE).edit().putInt("v", nv).apply()
+                fb.clearAfterSync(); loadModels()
+
+                withContext(Dispatchers.Main) {
+                    badge()
+                    btnSync.isEnabled = true; btnSync.text = "☁️  Sync"
+
+                    // Speak friendly confirmation
+                    voice?.speakMessage(
+                        "All done! Your preferences have been synced to the cloud. " +
+                        "The system will remember your choices from now on. " +
+                        "You're all set for your next drive."
+                    )
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    btnSync.isEnabled = true; btnSync.text = "☁️  Sync"
+                    voice?.speakMessage(
+                        "Sorry, I couldn't sync right now. Your preferences are still saved locally. " +
+                        "You can try again later using the sync button."
+                    )
+                }
+            }
         }
     }
 
@@ -227,8 +475,15 @@ class MainActivity : AppCompatActivity() {
             append("\nPending:${fb.getLogCount()} Model:v$modelV")}}
 
     private fun badge(){tvBadge.text=if(fb.getLogCount()>0)"${fb.getLogCount()} pending" else "v$modelV"}
+    private fun toggleDetails(){
+        if(detailCard.visibility==View.GONE){detailCard.visibility=View.VISIBLE;detailCard.alpha=0f
+            detailCard.animate().alpha(1f).setDuration(200).start();btnDetail.text="▼  Hide details"
+        }else{detailCard.visibility=View.GONE;btnDetail.text="▶  More details"}}
 
-    // TFLite
+    // ═══════════════════════════════════════
+    // TFLite inference (unchanged)
+    // ═══════════════════════════════════════
+
     private fun predCtx(r:FloatArray,ps:String):FloatArray{val n=norm(r);val p=oh(ps);val d=8+3+p.size;val x=FloatArray(d)
         System.arraycopy(n,0,x,0,8);x[8]=if(r[5]>=5f)1f else 0f;x[9]=if(r[0]<100f)1f else 0f;x[10]=if(r[1]<100f)1f else 0f
         System.arraycopy(p,0,x,11,p.size);val b=ByteBuffer.allocateDirect(4*d).order(ByteOrder.nativeOrder())
@@ -247,7 +502,10 @@ class MainActivity : AppCompatActivity() {
     private fun oh(ps:String):FloatArray{val c=meta.prev_state_classes;val i=c.indexOf(ps).let{if(it>=0)it else c.indexOf("NONE").coerceAtLeast(0)}
         val o=FloatArray(c.size);if(i in o.indices)o[i]=1f;return o}
 
-    // Greetings
+    // ═══════════════════════════════════════
+    // Greetings (unchanged)
+    // ═══════════════════════════════════════
+
     private fun greet(l:String,c:Float,h:Int,p:String):String{
         val t=when(h){in 5..11->"Good morning";in 12..16->"Good afternoon";in 17..20->"Good evening";else->"Late night"}
         val pool=gp(l,t,p=="NONE");val a=pool.filter{it !in usedGreetings};val pick=if(a.isNotEmpty())a.random() else pool.random();usedGreetings.add(pick);return pick}
@@ -265,6 +523,10 @@ class MainActivity : AppCompatActivity() {
         else->listOf("Context: $l")}
     private fun emoji(l:String)=when(l){"IDLE_HOME"->"🏠";"COMMUTING_TO_WORK"->"🚗";"ARRIVED_WORK"->"🏢";"IDLE_WORK"->"💼"
         "COMMUTING_HOME"->"🏡";"ARRIVED_HOME"->"🎉";"STOPPED_EN_ROUTE"->"🚦";"COMMUTING_OUTING"->"🛣️";"OUTING_IDLE"->"✅";else->"📌"}
+
+    // ═══════════════════════════════════════
+    // 29 Steps (unchanged)
+    // ═══════════════════════════════════════
 
     private fun steps()=listOf(
         Step(1,"Initial State — Home (7 AM)",f(10f,2000f,0f,0f,7f,4f,0f,900f),"NONE","🏠 FRI MORNING"),
@@ -299,7 +561,12 @@ class MainActivity : AppCompatActivity() {
     private fun f(vararg v:Float)=v
     data class Step(val n:Int,val t:String,val r:FloatArray,val po:String?,val j:String)
 
-    private fun bind(){tvStep=findViewById(R.id.tvStepIndicator);tvSection=findViewById(R.id.tvJourneySection)
+    // ═══════════════════════════════════════
+    // View binding
+    // ═══════════════════════════════════════
+
+    private fun bind(){
+        tvStep=findViewById(R.id.tvStepIndicator);tvSection=findViewById(R.id.tvJourneySection)
         tvBadge=findViewById(R.id.tvFeedbackCount);tvTitle=findViewById(R.id.tvConditionTitle)
         tvContext=findViewById(R.id.tvPredictedContext);tvGreet=findViewById(R.id.tvGreeting)
         tvConf=findViewById(R.id.tvConfidence);tvSource=findViewById(R.id.tvSource)
@@ -308,7 +575,12 @@ class MainActivity : AppCompatActivity() {
         tvNone=findViewById(R.id.tvNoSuggestion);btnYes=findViewById(R.id.btnYes);btnNo=findViewById(R.id.btnNo)
         btnDetail=findViewById(R.id.btnMoreDetails);detailCard=findViewById(R.id.detailsCard)
         tvDetail=findViewById(R.id.tvDetails);btnPrev=findViewById(R.id.btnPrev);btnNext=findViewById(R.id.btnNext)
-        btnSync=findViewById(R.id.btnSync);btnReset=findViewById(R.id.btnReset);scroll=findViewById(R.id.scrollView)}
+        btnSync=findViewById(R.id.btnSync);btnReset=findViewById(R.id.btnReset);scroll=findViewById(R.id.scrollView)
+        // Voice UI
+        voiceContainer=findViewById(R.id.voiceContainer)
+        voiceBar=findViewById(R.id.voiceBar)
+        tvVoiceStatus=findViewById(R.id.tvVoiceStatus)
+    }
     private fun loadAsset(f:String):ByteBuffer{assets.openFd(f).use{a->return a.createInputStream().channel.map(FileChannel.MapMode.READ_ONLY,a.startOffset,a.declaredLength)}}
 
     data class Meta(val schema_version:String,val features_numeric_order:List<String>,val prev_state_classes:List<String>,

@@ -7,6 +7,7 @@
     android:background="#F5F5F5"
     android:fitsSystemWindows="true">
 
+    <!-- Header -->
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="horizontal" android:gravity="center_vertical"
         android:paddingHorizontal="16dp" android:paddingTop="8dp" android:paddingBottom="6dp"
@@ -25,6 +26,7 @@
             app:strokeColor="#CE93D8" app:cornerRadius="6dp" android:minHeight="36dp"/>
     </LinearLayout>
 
+    <!-- Step bar -->
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="horizontal" android:gravity="center_vertical"
         android:paddingHorizontal="16dp" android:paddingVertical="6dp" android:background="#EDE7F6">
@@ -37,11 +39,13 @@
             android:background="@drawable/badge_bg" android:textSize="10sp" android:textColor="#FFF"/>
     </LinearLayout>
 
+    <!-- Content -->
     <ScrollView android:id="@+id/scrollView" android:layout_width="match_parent"
         android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true"
         android:clipToPadding="false" android:paddingHorizontal="12dp" android:paddingTop="8dp" android:paddingBottom="4dp">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
 
+            <!-- Context card -->
             <androidx.cardview.widget.CardView android:layout_width="match_parent" android:layout_height="wrap_content"
                 app:cardCornerRadius="12dp" app:cardElevation="2dp" android:layout_marginBottom="8dp">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -58,16 +62,18 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <!-- Loading -->
             <LinearLayout android:id="@+id/loadingContainer" android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:orientation="horizontal" android:gravity="center" android:padding="12dp" android:visibility="gone">
                 <ProgressBar android:layout_width="24dp" android:layout_height="24dp" android:indeterminateTint="#5C3D91"/>
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:layout_marginStart="10dp" android:text="ML model analyzing..." android:textSize="12sp" android:textColor="#888"/>
+                    android:layout_marginStart="10dp" android:text="ML model analyzing preferences..." android:textSize="12sp" android:textColor="#888"/>
             </LinearLayout>
 
+            <!-- Suggestion card -->
             <androidx.cardview.widget.CardView android:id="@+id/suggestionCard" android:layout_width="match_parent"
                 android:layout_height="wrap_content" app:cardCornerRadius="12dp" app:cardElevation="2dp"
-                app:cardBackgroundColor="#E8F5E9" android:layout_marginBottom="8dp" android:visibility="gone">
+                app:cardBackgroundColor="#E8F5E9" android:layout_marginBottom="4dp" android:visibility="gone">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="vertical" android:padding="14dp">
                     <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
@@ -93,9 +99,22 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <!-- Voice Indicator (between suggestion and More Details) -->
+            <LinearLayout android:id="@+id/voiceContainer" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center"
+                android:paddingVertical="6dp" android:visibility="gone">
+                <TextView android:id="@+id/tvVoiceStatus" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" android:textSize="11sp" android:textColor="#7E57C2"
+                    android:layout_marginBottom="4dp"/>
+                <View android:id="@+id/voiceBar" android:layout_width="180dp" android:layout_height="4dp"
+                    android:background="@drawable/voice_bar_bg"/>
+            </LinearLayout>
+
+            <!-- No suggestion -->
             <TextView android:id="@+id/tvNoSuggestion" android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:textSize="12sp" android:textColor="#AAA" android:gravity="center" android:padding="12dp" android:visibility="gone"/>
 
+            <!-- Details -->
             <com.google.android.material.button.MaterialButton android:id="@+id/btnMoreDetails"
                 style="@style/Widget.MaterialComponents.Button.TextButton"
                 android:layout_width="wrap_content" android:layout_height="36dp" android:text="▶  More details"
@@ -109,6 +128,7 @@
         </LinearLayout>
     </ScrollView>
 
+    <!-- Navigation -->
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
         android:orientation="horizontal" android:paddingHorizontal="12dp" android:paddingVertical="6dp"
         android:background="#FFF" android:elevation="8dp">
