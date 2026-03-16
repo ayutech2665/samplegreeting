@@ -5,8 +5,11 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
@@ -174,6 +177,140 @@ class MainActivity : AppCompatActivity() {
             if (a.l != "none") {
                 val r = cr.s.r
                 fb.recordYes(cr.l, a.l, r[4].toInt(), r[5].toInt(), cr.prev, r[7].toInt())
+
+                // Launch the appropriate app/mode
+                when (a.l) {
+                    "commute_to_work" -> {
+                        Log.i(TAG, "Opening Commute to Work mode in Droplet")
+                        try {
+                            val intent = Intent().apply {
+                                setClassName(
+                                    "com.tml.snapclient.hmi.droplet",
+                                    "com.tml.snapclient.hmi.droplet.MainActivity"
+                                )
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+
+                            startActivity(intent)
+
+                            val broadcast = Intent("com.example.ACTION_DROPLET_VALUE")
+                            broadcast.putExtra("droplet_name", "Commute To Work")
+                            broadcast.setPackage("com.tml.snapclient.hmi.droplet")
+                            sendBroadcast(broadcast)
+                            Log.i(TAG, "Broadcast sent: Commute To Work")
+                        } catch (e: Exception) {
+                            Log.i(TAG, "Failed to open Commute to Work: ${e.message}")
+                        }
+                    }
+
+                    "commute_to_home" -> {
+                        Log.i(TAG, "Opening Commute to Home")
+
+                        try {
+                            val intent = Intent().apply {
+                                setClassName(
+                                    "com.tml.snapclient.hmi.droplet",
+                                    "com.tml.snapclient.hmi.droplet.MainActivity"
+                                )
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+
+                            startActivity(intent)
+                            Log.i(TAG, "Droplet app opened")
+
+                            // Send broadcast after delay
+                            Handler(Looper.getMainLooper()).postDelayed({
+
+                                val broadcast = Intent("com.example.ACTION_DROPLET_VALUE")
+                                broadcast.putExtra("droplet_name", "Commute To Home")
+                                broadcast.setPackage("com.tml.snapclient.hmi.droplet")
+                                sendBroadcast(broadcast)
+
+                                Log.i(TAG, "Broadcast sent: Commute To Home")
+
+                            }, 3000) // 3000 ms = 3 seconds
+
+                        } catch (e: Exception) {
+                            Log.i(TAG, "Failed to open Droplet app: ${e.message}")
+                        }
+                    }
+
+                    "navigation" -> {
+                        Log.i(TAG, "Opening Navigation")
+
+                        try {
+                            val launchIntent = packageManager.getLaunchIntentForPackage(
+                                "com.mappls.auto.tml"
+                            )
+
+                            if (launchIntent != null) {
+                                startActivity(launchIntent)
+                                Log.i(TAG, "Navigation app launched")
+                            } else {
+                                Log.i(TAG, "Navigation app not installed")
+                            }
+
+                        } catch (e: Exception) {
+                            Log.i(TAG, "Failed to open Navigation: ${e.message}")
+                        }
+                    }
+
+                    "music" -> {
+                        Log.i(TAG, "Opening Music")
+                        try {
+                            val launchIntent = packageManager.getLaunchIntentForPackage(
+                                "com.harman.e12.app"
+                            )
+                            if (launchIntent != null) {
+                                startActivity(launchIntent)
+                            }
+                        } catch (e: Exception) {
+                            Log.i(TAG, "Failed to open Music: ${e.message}")
+                        }
+                    }
+
+                    "anti_stress" -> {
+                        Log.i(TAG, "Opening Anti-Stress")
+                        try {
+                            val intent = Intent().apply {
+                                setClassName(
+                                    "com.tml.snapclient.hmi.droplet",
+                                    "com.tml.snapclient.hmi.droplet.MainActivity"
+                                )
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+
+                            startActivity(intent)
+                            val broadcast = Intent("com.example.ACTION_DROPLET_VALUE")
+                            broadcast.putExtra("droplet_name", "Anti Stress")
+                            broadcast.setPackage("com.tml.snapclient.hmi.droplet")
+                            sendBroadcast(broadcast)
+                            Log.i(TAG, "Broadcast sent: Anti Stress")
+                        } catch (e: Exception) {
+                            Log.i(TAG, "Failed to open Anti-Stress: ${e.message}")
+                        }
+                    }
+
+                    "mespace" -> {
+                        Log.i(TAG, "Opening MeSpace")
+
+                        try {
+                            val intent = Intent().apply {
+                                setClassName(
+                                    "com.tml.snapclient.hmi.preference",
+                                    "com.tml.snapclient.hmi.preference.MainActivity"
+                                )
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+
+                            startActivity(intent)
+                            Log.i(TAG, "MeSpace MainActivity launched")
+
+                        } catch (e: Exception) {
+                            Log.i(TAG, "Failed to open MeSpace: ${e.message}")
+                        }
+                    }
+                }
             }
             btnYes.isEnabled = false
             btnNo.isEnabled = false
